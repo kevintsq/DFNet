@@ -17,8 +17,8 @@ import pytorch3d.transforms as transforms
 
 def preprocess_data(inputs, device):
     # normalize inputs according to https://pytorch.org/hub/pytorch_vision_mobilenet_v2/
-    mean = torch.Tensor([0.485, 0.456, 0.406]).to(device) # per channel subtraction
-    std = torch.Tensor([0.229, 0.224, 0.225]).to(device) # per channel division
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device) # per channel subtraction
+    std = torch.tensor([0.229, 0.224, 0.225], device=device) # per channel division
     inputs = (inputs - mean[None,:,None,None])/std[None,:,None,None]
     return inputs
 
@@ -123,9 +123,9 @@ def compute_error_in_q(args, dl, model, device, results, batch_size=1):
                 predict_pose = predict_pose.reshape((batch_size, 3, 4)).cpu().numpy()
             time_spent.append(time.time() - start_time)
 
-        pose_q = transforms.matrix_to_quaternion(torch.Tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
+        pose_q = transforms.matrix_to_quaternion(torch.tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
         pose_x = pose[:, :3, 3] # gnd truth position
-        predicted_q = transforms.matrix_to_quaternion(torch.Tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
+        predicted_q = transforms.matrix_to_quaternion(torch.tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
         predicted_x = predict_pose[:, :3, 3] # predict position
         pose_q = pose_q.squeeze() 
         pose_x = pose_x.squeeze() 
@@ -138,7 +138,7 @@ def compute_error_in_q(args, dl, model, device, results, batch_size=1):
         d = torch.abs(torch.sum(torch.matmul(q1,q2))) 
         d = torch.clamp(d, -1., 1.) # acos can only input [-1~1]
         theta = (2 * torch.acos(d) * 180/math.pi).numpy()
-        error_x = torch.linalg.norm(torch.Tensor(pose_x-predicted_x)).numpy()
+        error_x = torch.linalg.norm(torch.tensor(pose_x-predicted_x)).numpy()
         results[i,:] = [error_x, theta]
         #print ('Iteration: {} Error XYZ (m): {} Error Q (degrees): {}'.format(i, error_x, theta)) 
 

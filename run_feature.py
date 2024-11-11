@@ -1,15 +1,10 @@
 import sys
-sys.path.append('../')
-import torch
-from torch import nn, optim
+sys.path.append('/')
+from torch import optim
 from torchvision.utils import save_image
-import os, pdb
-from torchsummary import summary
 from dataset_loaders.load_7Scenes import load_7Scenes_dataloader
 from dataset_loaders.load_Cambridge import load_Cambridge_dataloader
-import os.path as osp
-import numpy as np
-from utils.utils import plot_features, save_image_saliancy, save_image_saliancy_single
+from utils.utils import save_image_saliancy_single
 from utils.utils import freeze_bn_layer, freeze_bn_layer_train
 from models.nerfw import create_nerf
 from tqdm import tqdm
@@ -377,7 +372,7 @@ def train_feature(args, train_dl, val_dl, test_dl, hwf, i_split, near, far):
                         elif poses_perturb[i,j,3]> b_max[j]:
                             poses_perturb[i,j,3] = b_max[j]
 
-                poses_perturb = torch.Tensor(poses_perturb).to(device) # [B, 3, 4]
+                poses_perturb = torch.tensor(poses_perturb, device=device) # [B, 3, 4]
                 tqdm.write("renders RVS...")
                 virtue_view = render_virtual_imgs(args, poses_perturb, img_idxs, hwf, device, render_kwargs_test, world_setup_dict)
             

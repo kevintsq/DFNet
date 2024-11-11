@@ -12,35 +12,36 @@ from torchvision import transforms, models
 from dataset_loaders.seven_scenes import SevenScenes
 import pdb
 
-to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
+to8b = lambda x: (255 * np.clip(x, 0, 1)).astype(np.uint8)
 
 # translation z axis
-trans_t = lambda t : np.array([
-    [1,0,0,0],
-    [0,1,0,0],
-    [0,0,1,t],
-    [0,0,0,1]]).astype(float)
+trans_t = lambda t: np.array([
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, t],
+    [0, 0, 0, 1]]).astype(float)
 
 # x rotation
-rot_phi = lambda phi : np.array([
-    [1,0,0,0],
-    [0,np.cos(phi),-np.sin(phi),0],
-    [0,np.sin(phi), np.cos(phi),0],
-    [0,0,0,1]]).astype(float)
+rot_phi = lambda phi: np.array([
+    [1, 0, 0, 0],
+    [0, np.cos(phi), -np.sin(phi), 0],
+    [0, np.sin(phi), np.cos(phi), 0],
+    [0, 0, 0, 1]]).astype(float)
 
 # y rotation
-rot_theta = lambda th : np.array([
-    [np.cos(th),0,-np.sin(th),0],
-    [0,1,0,0],
-    [np.sin(th),0, np.cos(th),0],
-    [0,0,0,1]]).astype(float)
+rot_theta = lambda th: np.array([
+    [np.cos(th), 0, -np.sin(th), 0],
+    [0, 1, 0, 0],
+    [np.sin(th), 0, np.cos(th), 0],
+    [0, 0, 0, 1]]).astype(float)
 
 # z rotation
-rot_psi = lambda psi : np.array([
-    [np.cos(psi),-np.sin(psi),0,0],
-    [np.sin(psi),np.cos(psi),0,0],
-    [0,0,1,0],
-    [0,0,0,1]]).astype(float)
+rot_psi = lambda psi: np.array([
+    [np.cos(psi), -np.sin(psi), 0, 0],
+    [np.sin(psi), np.cos(psi), 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]]).astype(float)
+
 
 def camera_frustum_initializer(args):
     ''' initialize camera frustum parameters '''
@@ -48,23 +49,25 @@ def camera_frustum_initializer(args):
     FAR_THRESH = args.near_far[1]
     SAMPLE_STEP = 0.1
 
-    SCENES7_X_RES = 640.0/2
-    SCENES7_Y_RES = 480.0/2
-    SCENES7_F = 585.0/2 # 585/2
+    SCENES7_X_RES = 640.0 / 2
+    SCENES7_Y_RES = 480.0 / 2
+    SCENES7_F = 585.0 / 2  # 585/2
     SCENES7_CX = SCENES7_X_RES / 2.0
     SCENES7_CY = SCENES7_Y_RES / 2.0
 
-    W = 640.0/2
-    H = 480.0/2
+    W = 640.0 / 2
+    H = 480.0 / 2
     K_APPROX = initK(SCENES7_F, SCENES7_CX, SCENES7_CY)
 
     FRUSTUM_APPROX = generate_sampling_frustum(
         SAMPLE_STEP, FAR_THRESH, K_APPROX, SCENES7_F, SCENES7_CX, SCENES7_CY, SCENES7_X_RES, SCENES7_Y_RES
     )
-    return  K_APPROX, FRUSTUM_APPROX, W, H
+    return K_APPROX, FRUSTUM_APPROX, W, H
+
 
 def is_inside_frustum(p, x_res, y_res):
     return (0 < p[0]) & (p[0] < x_res) & (0 < p[1]) & (p[1] < y_res)
+
 
 def initK(f, cx, cy):
     K = np.eye(3, 3)
@@ -72,6 +75,7 @@ def initK(f, cx, cy):
     K[0, 2] = cx
     K[1, 2] = cy
     return K
+
 
 def generate_sampling_frustum(step, depth, K, f, cx, cy, x_res, y_res):
     x_max = depth * (x_res - cx) / f
@@ -98,6 +102,7 @@ def generate_sampling_frustum(step, depth, K, f, cx, cy, x_res, y_res):
     X0 = np.array(X0)
     return X0
 
+
 def compute_frustums_overlap(pose0, pose1, sampling_frustum, K, x_res, y_res):
     R0 = pose0[0:3, 0:3]
     t0 = pose0[0:3, 3]
@@ -114,14 +119,16 @@ def compute_frustums_overlap(pose0, pose1, sampling_frustum, K, x_res, y_res):
     res = np.apply_along_axis(is_inside_frustum, 1, p, x_res, y_res)
     return np.sum(res) / float(res.shape[0])
 
+
 def perturb_rotation(c2w, theta, phi, psi=0):
     last_row = np.tile(np.array([0, 0, 0, 1]), (1, 1))  # (N_images, 1, 4)
     c2w = np.concatenate([c2w, last_row], 0)  # (N_images, 4, 4) homogeneous coordinate
-    c2w = rot_phi(phi/180.*np.pi) @ c2w
-    c2w = rot_theta(theta/180.*np.pi) @ c2w
-    c2w = rot_psi(psi/180.*np.pi) @ c2w
-    c2w = c2w[:3,:4]
+    c2w = rot_phi(phi / 180. * np.pi) @ c2w
+    c2w = rot_theta(theta / 180. * np.pi) @ c2w
+    c2w = rot_psi(psi / 180. * np.pi) @ c2w
+    c2w = c2w[:3, :4]
     return c2w
+
 
 def viewmatrix(z, up, pos):
     vec2 = normalize(z)
@@ -131,9 +138,11 @@ def viewmatrix(z, up, pos):
     m = np.stack([vec0, vec1, vec2, pos], 1)
     return m
 
+
 def normalize(v):
     """Normalize a vector."""
     return v / np.linalg.norm(v)
+
 
 def average_poses(poses):
     """
@@ -164,6 +173,7 @@ def average_poses(poses):
     pose_avg = np.stack([x, y, z, center], 1)  # (3, 4)
     return pose_avg
 
+
 def center_poses(poses, pose_avg_from_file=None):
     """
     Center the poses so that we can use NDC.
@@ -177,7 +187,6 @@ def center_poses(poses, pose_avg_from_file=None):
         poses_centered: (N_images, 3, 4) the centered poses
         pose_avg: (3, 4) the average pose
     """
-
 
     if pose_avg_from_file is None:
         pose_avg = average_poses(poses)  # (3, 4) # this need to be fixed throughout dataset
@@ -194,46 +203,49 @@ def center_poses(poses, pose_avg_from_file=None):
     poses_centered = np.linalg.inv(pose_avg_homo) @ poses_homo  # (N_images, 4, 4)
     poses_centered = poses_centered[:, :3]  # (N_images, 3, 4)
 
-    return poses_centered, pose_avg #np.linalg.inv(pose_avg_homo)
+    return poses_centered, pose_avg  # np.linalg.inv(pose_avg_homo)
+
 
 def render_path_spiral(c2w, up, rads, focal, zdelta, zrate, rots, N):
     render_poses = []
     rads = np.array(list(rads) + [1.])
-    hwf = c2w[:,4:5] # it's empty here...
-    
-    for theta in np.linspace(0., 2. * np.pi * rots, N+1)[:-1]:
-        c = np.dot(c2w[:3,:4], np.array([np.cos(theta), -np.sin(theta), -np.sin(theta*zrate), 1.]) * rads) 
-        z = normalize(c - np.dot(c2w[:3,:4], np.array([0,0,-focal, 1.])))
+    hwf = c2w[:, 4:5]  # it's empty here...
+
+    for theta in np.linspace(0., 2. * np.pi * rots, N + 1)[:-1]:
+        c = np.dot(c2w[:3, :4], np.array([np.cos(theta), -np.sin(theta), -np.sin(theta * zrate), 1.]) * rads)
+        z = normalize(c - np.dot(c2w[:3, :4], np.array([0, 0, -focal, 1.])))
         render_poses.append(np.concatenate([viewmatrix(z, up, c), hwf], 1))
     return render_poses
 
+
 def generate_render_pose(poses, bds):
     idx = np.random.choice(poses.shape[0])
-    c2w=poses[idx]
-    print(c2w[:3,:4])
-    
+    c2w = poses[idx]
+    print(c2w[:3, :4])
+
     ## Get spiral
     # Get average pose
     up = normalize(poses[:, :3, 1].sum(0))
 
     # Find a reasonable "focus depth" for this dataset
-    close_depth, inf_depth = bds.min()*.9, bds.max()*5.
+    close_depth, inf_depth = bds.min() * .9, bds.max() * 5.
     dt = .75
-    mean_dz = 1./(((1.-dt)/close_depth + dt/inf_depth))
+    mean_dz = 1. / (((1. - dt) / close_depth + dt / inf_depth))
     focal = mean_dz
 
     # Get radii for spiral path
     shrink_factor = .8
     zdelta = close_depth * .2
-    tt = poses[:,:3,3] # ptstocam(poses[:3,3,:].T, c2w).T
-    rads = np.percentile(np.abs(tt), 20, 0) # views of 20 degrees
+    tt = poses[:, :3, 3]  # ptstocam(poses[:3,3,:].T, c2w).T
+    rads = np.percentile(np.abs(tt), 20, 0)  # views of 20 degrees
     c2w_path = c2w
-    N_views = 120 # number of views in video
+    N_views = 120  # number of views in video
     N_rots = 2
 
     # Generate poses for spiral path
     render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
     return render_poses
+
 
 def perturb_render_pose(poses, bds, x, angle):
     """
@@ -246,20 +258,21 @@ def perturb_render_pose(poses, bds, x, angle):
         new_c2w: (N_views, 3, 4) new poses
     """
     idx = np.random.choice(poses.shape[0])
-    c2w=poses[idx]
-    
-    N_views = 10 # number of views in video    
+    c2w = poses[idx]
+
+    N_views = 10  # number of views in video
     new_c2w = np.zeros((N_views, 3, 4))
 
     # perturb translational pose
     for i in range(N_views):
         new_c2w[i] = c2w
-        new_c2w[i,:,3] = new_c2w[i,:,3] + np.random.uniform(-x,x,3) # perturb pos between -1 to 1
-        theta=np.random.uniform(-angle,angle,1) # in degrees
-        phi=np.random.uniform(-angle,angle,1) # in degrees
-        psi=np.random.uniform(-angle,angle,1) # in degrees
+        new_c2w[i, :, 3] = new_c2w[i, :, 3] + np.random.uniform(-x, x, 3)  # perturb pos between -1 to 1
+        theta = np.random.uniform(-angle, angle, 1)  # in degrees
+        phi = np.random.uniform(-angle, angle, 1)  # in degrees
+        psi = np.random.uniform(-angle, angle, 1)  # in degrees
         new_c2w[i] = perturb_rotation(new_c2w[i], theta, phi, psi)
     return new_c2w, idx
+
 
 def remove_overlap_data(train_set, val_set):
     ''' Remove some overlap data in val set so that train set and val set do not have overlap '''
@@ -267,14 +280,15 @@ def remove_overlap_data(train_set, val_set):
     val = val_set.gt_idx
 
     # find redundant data index in val_set
-    index = np.where(np.in1d(val, train) == True) # this is a tuple
+    index = np.where(np.in1d(val, train) == True)  # this is a tuple
     # delete redundant data
     val_set.gt_idx = np.delete(val_set.gt_idx, index)
     val_set.poses = np.delete(val_set.poses, index, axis=0)
     for i in sorted(index[0], reverse=True):
-        val_set.c_imgs.pop(i) 
+        val_set.c_imgs.pop(i)
         val_set.d_imgs.pop(i)
     return train_set, val_set
+
 
 def fix_coord(args, train_set, val_set, pose_avg_stats_file='', rescale_coord=True):
     ''' fix coord for 7 Scenes to align with llff style dataset '''
@@ -308,33 +322,34 @@ def fix_coord(args, train_set, val_set, pose_avg_stats_file='', rescale_coord=Tr
         all_poses, pose_avg = center_poses(all_poses, pose_avg_from_file)
     else:
         all_poses, pose_avg = center_poses(all_poses)
-    
+
     ### args.fix_coord, obsolete flag
     # Correct axis to LLFF Style y,z -> -y,-z
     last_row = np.tile(np.array([0, 0, 0, 1]), (len(all_poses), 1, 1))  # (N_images, 1, 4)
     all_poses = np.concatenate([all_poses, last_row], 1)
 
     # correct rotation matrix from "up left forward" to "up right backward"
-    flip_M = np.array([[1,0,0,0],[0,-1,0,0],[0,0,-1,0],[0,0,0,1]]) # Mirror matrix that flip y & z direction
-    flip_M = np.repeat(flip_M[None,:], all_poses.shape[0], axis=0)
+    flip_M = np.array(
+        [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])  # Mirror matrix that flip y & z direction
+    flip_M = np.repeat(flip_M[None, :], all_poses.shape[0], axis=0)
 
     # all_poses = flip_M@all_poses@flip_M.transpose((0,2,1)) # This is correct M*[R|T]*M.T
-    all_poses = flip_M@(all_poses@flip_M) # bug here M*([R|T]*M)
-    all_poses = all_poses[:,:3,:4]
+    all_poses = flip_M @ (all_poses @ flip_M)  # bug here M*([R|T]*M)
+    all_poses = all_poses[:, :3, :4]
 
-    bounds = np.array([train_set.near, train_set.far]) # manual tuned
+    bounds = np.array([train_set.near, train_set.far])  # manual tuned
 
     if rescale_coord:
-        sc=train_set.pose_scale # manual tuned factor, align with colmap scale
-        all_poses[:,:3,3] *= sc
+        sc = train_set.pose_scale  # manual tuned factor, align with colmap scale
+        all_poses[:, :3, 3] *= sc
 
-        ### quite ugly ### 
+        ### quite ugly ###
         # move center of camera pose
-        if train_set.move_all_cam_vec != [0.,0.,0.]:
+        if train_set.move_all_cam_vec != [0., 0., 0.]:
             all_poses[:, :3, 3] += train_set.move_all_cam_vec
 
         if train_set.pose_scale2 != 1.0:
-            all_poses[:,:3,3] *= train_set.pose_scale2
+            all_poses[:, :3, 3] *= train_set.pose_scale2
         # end of new mod1
 
     # Return all poses to dataset loaders
@@ -342,6 +357,7 @@ def fix_coord(args, train_set, val_set, pose_avg_stats_file='', rescale_coord=Tr
     train_set.poses = all_poses[:train_poses.shape[0]]
     val_set.poses = all_poses[train_poses.shape[0]:]
     return train_set, val_set, bounds
+
 
 def fetch_unique_view_index(args, train_set, threshold):
     ''' local NeRF data selection '''
@@ -355,22 +371,24 @@ def fetch_unique_view_index(args, train_set, threshold):
 
     for i in range(len(train_set)):
         if i % 200 == 0:
-            print ('Image {:d} / {:d}'.format(i, len(train_set)))
-        
+            print('Image {:d} / {:d}'.format(i, len(train_set)))
+
         if keyframe_idx == i:
             continue
-        
+
         # compute frustum overlap
         overlap_1p = compute_frustums_overlap(
-            train_set.poses[keyframe_idx].reshape(3,4), train_set.poses[i].reshape(3,4), FRUSTUM_APPROX, K_APPROX, W, H
+            train_set.poses[keyframe_idx].reshape(3, 4), train_set.poses[i].reshape(3, 4), FRUSTUM_APPROX, K_APPROX, W,
+            H
         )
         if overlap_1p > threshold:
             continue
-            
+
         # double check with existing unique views
         save_flag = True
         for j in unique_frame_index:
-            overlap_2p = compute_frustums_overlap(train_set.poses[j].reshape(3,4), train_set.poses[i].reshape(3,4), FRUSTUM_APPROX, K_APPROX, W, H)
+            overlap_2p = compute_frustums_overlap(train_set.poses[j].reshape(3, 4), train_set.poses[i].reshape(3, 4),
+                                                  FRUSTUM_APPROX, K_APPROX, W, H)
             if overlap_2p > threshold:
                 save_flag = False
                 break
@@ -389,6 +407,7 @@ def fetch_unique_view_index(args, train_set, threshold):
     np.savetxt(save_unique_view_dir, unique_frame_index, fmt="%d")
     return unique_frame_index
 
+
 def select_nearest_neighbor_views(args, train_set, threshold, unique_frame_index):
     ''' select nearest_neighbor views based on unique_frame_index  '''
     # Frustum near-far threshold
@@ -400,14 +419,15 @@ def select_nearest_neighbor_views(args, train_set, threshold, unique_frame_index
 
     for i in range(len(train_set)):
         if i % 200 == 0:
-            print ('Image {:d} / {:d}'.format(i, len(train_set)))
-        
+            print('Image {:d} / {:d}'.format(i, len(train_set)))
+
         if keyframe_idx == i:
             continue
-        
+
         # compute frustum overlap
         for j in unique_frame_index:
-            overlap_2p = compute_frustums_overlap(train_set.poses[j].reshape(3,4), train_set.poses[i].reshape(3,4), FRUSTUM_APPROX, K_APPROX, W, H)
+            overlap_2p = compute_frustums_overlap(train_set.poses[j].reshape(3, 4), train_set.poses[i].reshape(3, 4),
+                                                  FRUSTUM_APPROX, K_APPROX, W, H)
             if overlap_2p > threshold:
                 frame_index.append(i)
                 break
@@ -419,14 +439,15 @@ def select_nearest_neighbor_views(args, train_set, threshold, unique_frame_index
     train_set.poses = train_set.poses[frame_index]
     return
 
+
 def load_7Scenes_dataloader(args):
     ''' Data loader for Pose Regression Network '''
-    if args.pose_only: # if train posenet is true
+    if args.pose_only:  # if train posenet is true
         pass
     else:
         raise Exception('load_7Scenes_dataloader() currently only support PoseNet Training, not NeRF training')
-    data_dir, scene = osp.split(args.datadir) # ../data/7Scenes, chess
-    dataset_folder, dataset = osp.split(data_dir) # ../data, 7Scenes
+    data_dir, scene = osp.split(args.datadir)  # ../data/7Scenes, chess
+    dataset_folder, dataset = osp.split(data_dir)  # ../data, 7Scenes
 
     # transformer
     data_transform = transforms.Compose([
@@ -435,10 +456,10 @@ def load_7Scenes_dataloader(args):
     ])
     target_transform = transforms.Lambda(lambda x: torch.Tensor(x))
 
-    data_dir = osp.join(dataset_folder, 'deepslam_data', dataset) # ../data/deepslam_data/7Scenes
+    data_dir = osp.join(dataset_folder, 'deepslam_data', dataset)  # ../data/deepslam_data/7Scenes
 
-    ret_idx = False # return frame index
-    fix_idx = False # return frame index=0 in training
+    ret_idx = False  # return frame index
+    fix_idx = False  # return frame index=0 in training
     ret_hist = False
 
     if 'NeRFH' in args:
@@ -454,12 +475,12 @@ def load_7Scenes_dataloader(args):
         ret_hist = True
 
     # kwargs = dict(scene=scene, data_path=data_dir, transform=data_transform, target_transform=target_transform)
-    kwargs = dict(scene=scene, data_path=data_dir, 
-        transform=data_transform, target_transform=target_transform, 
-        df=args.df, ret_idx=ret_idx, fix_idx=fix_idx,
-        ret_hist=ret_hist, hist_bin=args.hist_bin)
+    kwargs = dict(scene=scene, data_path=data_dir,
+                  transform=data_transform, target_transform=target_transform,
+                  df=args.df, ret_idx=ret_idx, fix_idx=fix_idx,
+                  ret_hist=ret_hist, hist_bin=args.hist_bin)
     # pdb.set_trace()
-    if args.finetune_unlabel: # direct-pn + unlabel
+    if args.finetune_unlabel:  # direct-pn + unlabel
         train_set = SevenScenes(train=False, testskip=args.trainskip, **kwargs)
         val_set = SevenScenes(train=False, testskip=args.testskip, **kwargs)
 
@@ -485,7 +506,7 @@ def load_7Scenes_dataloader(args):
     else:
         train_set, val_set, bounds = fix_coord(args, train_set, val_set, rescale_coord=False)
 
-    train_dl = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=8) # debug
+    train_dl = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=8)  # debug
     # train_dl = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=5, pin_memory=False)
     val_dl = DataLoader(val_set, batch_size=args.val_batch_size, shuffle=False, num_workers=2)
     test_dl = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=2)
@@ -494,20 +515,21 @@ def load_7Scenes_dataloader(args):
     i_split = [i_train, i_val, i_test]
     return train_dl, val_dl, test_dl, hwf, i_split, bounds.min(), bounds.max()
 
+
 def load_7Scenes_dataloader_NeRF(args):
     ''' Data loader for NeRF '''
 
-    data_dir, scene = osp.split(args.datadir) # ../data/7Scenes, chess
-    dataset_folder, dataset = osp.split(data_dir) # ../data, 7Scenes
+    data_dir, scene = osp.split(args.datadir)  # ../data/7Scenes, chess
+    dataset_folder, dataset = osp.split(data_dir)  # ../data, 7Scenes
 
     data_transform = transforms.Compose([
         transforms.ToTensor()])
     target_transform = transforms.Lambda(lambda x: torch.Tensor(x))
 
-    data_dir = osp.join('..', 'data', 'deepslam_data', dataset) # ../data/deepslam_data/7Scenes
+    data_dir = osp.join('..', 'data', 'deepslam_data', dataset)  # ../data/deepslam_data/7Scenes
 
-    ret_idx = False # return frame index
-    fix_idx = False # return frame index=0 in training
+    ret_idx = False  # return frame index
+    fix_idx = False  # return frame index=0 in training
     ret_hist = False
 
     if 'NeRFH' in args:
@@ -522,8 +544,8 @@ def load_7Scenes_dataloader_NeRF(args):
         ret_hist = True
 
     kwargs = dict(scene=scene, data_path=data_dir,
-        transform=data_transform, target_transform=target_transform, 
-        df=args.df, ret_idx=ret_idx, fix_idx=fix_idx, ret_hist=ret_hist, hist_bin=args.hist_bin)
+                  transform=data_transform, target_transform=target_transform,
+                  df=args.df, ret_idx=ret_idx, fix_idx=fix_idx, ret_hist=ret_hist, hist_bin=args.hist_bin)
 
     train_set = SevenScenes(train=True, trainskip=args.trainskip, **kwargs)
     val_set = SevenScenes(train=False, testskip=args.testskip, **kwargs)
@@ -540,16 +562,18 @@ def load_7Scenes_dataloader_NeRF(args):
         train_set, val_set, bounds = fix_coord(args, train_set, val_set)
 
     render_poses = None
-    render_img = None 
+    render_img = None
 
-    train_shuffle=True
-    if args.render_video_train or args.render_test: # or args.method3:
-        train_shuffle=False
+    train_shuffle = True
+    if args.render_video_train or args.render_test:  # or args.method3:
+        train_shuffle = False
     train_dl = DataLoader(train_set, batch_size=1, shuffle=train_shuffle)
     val_dl = DataLoader(val_set, batch_size=1, shuffle=False)
 
     hwf = [train_set.H, train_set.W, train_set.focal]
 
     i_split = [i_train, i_val, i_test]
-    
+
     return train_dl, val_dl, hwf, i_split, bounds, render_poses, render_img
+
+

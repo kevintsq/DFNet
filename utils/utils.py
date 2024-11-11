@@ -1,18 +1,17 @@
 '''
 helper functions to train robust feature extractors
 '''
+from math import pi
+
+import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import datetime
 from torchvision.utils import make_grid
-import matplotlib.pyplot as plt
-import pdb
-from PIL import Image
-from torchvision.utils import save_image
-from math import pi
-import cv2
+
+
 # from pykalman import KalmanFilter
 
 def freeze_bn_layer(model):
@@ -166,7 +165,6 @@ def sample_homography_np(
     pts2 = margin + np.array([[0, 0], [0, patch_ratio],
                                  [patch_ratio, patch_ratio], [patch_ratio, 0]])
 
-    from numpy.random import normal
     from numpy.random import uniform
     from scipy.stats import truncnorm
 
@@ -255,7 +253,7 @@ def warp_points(points, homographies, device='cpu'):
     homographies = homographies.unsqueeze(0) if no_batches else homographies
 
     batch_size = homographies.shape[0]
-    points = torch.cat((points.float(), torch.ones((points.shape[0], 1)).to(device)), dim=1)
+    points = torch.cat((points.float(), torch.ones((points.shape[0], 1), device=device)), dim=1)
     points = points.to(device)
     homographies = homographies.view(batch_size*3,3)
 
@@ -290,7 +288,8 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
         mat_homo_inv = mat_homo_inv.view(1,3,3)
 
     Batch, channel, H, W = img.shape
-    coor_cells = torch.stack(torch.meshgrid(torch.linspace(-1, 1, W), torch.linspace(-1, 1, H), indexing='ij'), dim=2)
+    coor_cells = torch.stack(torch.meshgrid(torch.linspace(-1, 1, W, device=device),
+                                            torch.linspace(-1, 1, H, device=device), indexing='ij'), dim=2)
     coor_cells = coor_cells.transpose(0, 1)
     coor_cells = coor_cells.to(device)
     coor_cells = coor_cells.contiguous()

@@ -147,7 +147,7 @@ def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=
     if half_res:
         N_rand = batch_size * (H//2) * (W//2)
         target_half = np.stack([cv2.resize(target_[i], (H//2, W//2), interpolation=cv2.INTER_AREA) for i in range(batch_size)], 0)
-        target_half = torch.Tensor(target_half)
+        target_half = torch.tensor(target_half)
         
         rays = torch.stack([torch.stack(get_rays(H//2, W//2, focal/2, pose[i]), 0) for i in range(batch_size)], 0) # [N, ro+rd, H, W, 3] (130, 2, 100, 100, 3)
         rays_rgb = torch.cat((rays, target_half[:, None, ...]), 1)
@@ -155,7 +155,7 @@ def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=
     else:
         # N_rand = batch_size * H * W
         N_rand = args.N_rand
-        target_ = torch.Tensor(target_)
+        target_ = torch.tensor(target_)
         rays = torch.stack([torch.stack(get_rays(H, W, focal, pose[i]), 0) for i in range(batch_size)], 0) # [N, ro+rd, H, W, 3] (130, 2, 200, 200, 3)
         # [N, ro+rd+rgb, H, W, 3]
         rays_rgb = torch.cat([rays, target_[:, None, ...]], 1)
@@ -167,7 +167,7 @@ def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=
     rays_rgb = torch.reshape(rays_rgb, (-1, 3, 3))
 
     if 1:
-        rays_rgb = rays_rgb[torch.randperm(rays_rgb.shape[0])]
+        rays_rgb = rays_rgb[torch.randperm(rays_rgb.shape[0], device="cuda")]
 
     # Random over all images
     batch = rays_rgb[:N_rand].permute(1, 0 , 2) # [B, 2+1, 3*?] # (4096, 3, 3)
@@ -197,14 +197,14 @@ def eval_on_batch(args, data, model, feat_model, pose, img_idx, hwf, half_res, d
         pose_nerf = pose_nerf.to(device)
 
         # every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
         rgb, disp, acc, extras = render(H, W, focal, chunk=args.chunk, rays=batch_rays, img_idx=img_idx, **render_kwargs_test)
 
         loss = PoseLoss(args, pose_, pose, device)
         psnr = mse2psnr(img2mse(rgb, target))
 
         # end of every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.FloatTensor')
+        
 
         iter_loss = loss.to(device_cpu).detach().numpy()
         iter_loss = np.array([iter_loss])
@@ -249,7 +249,7 @@ def train_on_feature_batch(args, data, model, feat_model, pose, img_idx, hwf, op
     pose = pose.to(device)
     img_idx = img_idx.to(device)
     # every new tensor from onward is in GPU, here memory cost is a bottleneck
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    
 
     # here is single frame
     target = data.permute(0,2,3,1) # [B,H,W,C]
@@ -267,7 +267,8 @@ def train_on_feature_batch(args, data, model, feat_model, pose, img_idx, hwf, op
     img_idx_batch = torch.cat(img_idx_list)
 
     # randomly select coords
-    coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W), indexing='ij'), -1)  # (H, W, 2)
+    coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H, device="cuda"),
+                                        torch.linspace(0, W-1, W, device="cuda"), indexing='ij'), -1)  # (H, W, 2)
     coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
     select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
     select_coords = coords[select_inds].long()  # (N_rand, 2)
@@ -311,7 +312,7 @@ def train_on_feature_batch(args, data, model, feat_model, pose, img_idx, hwf, op
     psnr = mse2psnr(img2mse(rgb, target_s))
 
     # end of every new tensor from onward is in GPU
-    torch.set_default_tensor_type('torch.FloatTensor')
+    
     device_cpu = torch.device('cpu')
     iter_loss = loss.to(device_cpu).detach().numpy()
     iter_loss = np.array([iter_loss])
@@ -336,7 +337,7 @@ def train_on_batch(args, data, model, feat_model, pose, img_idx, hwf, optimizer,
     pose = pose.to(device)
     img_idx = img_idx.to(device)
     # every new tensor from onward is in GPU, here memory cost is a bottleneck
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    
 
     if half_res:
         rgb, disp, acc, extras = render(H//4, W//4, focal/4, chunk=args.chunk, c2w=pose_nerf[0,:3,:4], img_idx=img_idx, **render_kwargs_test)
@@ -381,7 +382,7 @@ def train_on_batch(args, data, model, feat_model, pose, img_idx, hwf, optimizer,
     psnr = mse2psnr(img2mse(rgb, data))
 
     # end of every new tensor from onward is in GPU
-    torch.set_default_tensor_type('torch.FloatTensor')
+    
     device_cpu = torch.device('cpu')
     iter_loss = loss.to(device_cpu).detach().numpy()
     iter_loss = np.array([iter_loss])

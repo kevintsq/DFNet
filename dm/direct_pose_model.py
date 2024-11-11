@@ -109,13 +109,13 @@ def load_exisiting_model(args, isFeatureNet=False):
             model.load_state_dict(torch.load(args.pretrain_featurenet_path))
         return model
 
-def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=True, rand=True):
+def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=True):
     ''' Break batch of images into rays '''
     target_ = target_.permute(0, 2, 3, 1).numpy()#.squeeze(0) # convert to numpy image
     if half_res:
         N_rand = batch_size * (H//2) * (W//2)
         target_half = np.stack([cv2.resize(target_[i], (H//2, W//2), interpolation=cv2.INTER_AREA) for i in range(batch_size)], 0)
-        target_half = torch.Tensor(target_half)
+        target_half = torch.tensor(target_half)
         
         rays = torch.stack([torch.stack(get_rays(H//2, W//2, focal/2, pose[i]), 0) for i in range(batch_size)], 0) # [N, ro+rd, H, W, 3] (130, 2, 100, 100, 3)
         rays_rgb = torch.cat((rays, target_half[:, None, ...]), 1)
@@ -123,7 +123,7 @@ def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=
     else:
         # N_rand = batch_size * H * W
         N_rand = args.N_rand
-        target_ = torch.Tensor(target_)
+        target_ = torch.tensor(target_, device="cuda")
         rays = torch.stack([torch.stack(get_rays(H, W, focal, pose[i]), 0) for i in range(batch_size)], 0) # [N, ro+rd, H, W, 3] (130, 2, 200, 200, 3)
         # [N, ro+rd+rgb, H, W, 3]
         rays_rgb = torch.cat([rays, target_[:, None, ...]], 1)
@@ -136,7 +136,7 @@ def prepare_batch_render(args, pose, batch_size, target_, H, W, focal, half_res=
 
     if 1:
         #print('shuffle rays')
-        rays_rgb = rays_rgb[torch.randperm(rays_rgb.shape[0])]
+        rays_rgb = rays_rgb[torch.randperm(rays_rgb.shape[0], device="cuda")]
 
     # Random over all images
     batch = rays_rgb[:N_rand].permute(1, 0 , 2) # [B, 2+1, 3*?] # (4096, 3, 3)
@@ -156,9 +156,9 @@ def fix_coord_supp(args, pose, world_setup_dict, device=None):
     '''
     sc=world_setup_dict['pose_scale'] # manual tuned factor, align with colmap scale
     if device is None:
-        move_all_cam_vec = torch.Tensor(world_setup_dict['move_all_cam_vec'])
+        move_all_cam_vec = torch.tensor(world_setup_dict['move_all_cam_vec'])
     else:
-        move_all_cam_vec = torch.Tensor(world_setup_dict['move_all_cam_vec']).to(device)
+        move_all_cam_vec = torch.tensor(world_setup_dict['move_all_cam_vec']).to(device)
     sc2 = world_setup_dict['pose_scale2']
     pose[:,:3,3] *= sc
     # move center of camera pose
@@ -187,7 +187,7 @@ def eval_on_batch(args, data, model, pose, img_idx, hwf, half_res, device, **ren
         img_idx = img_idx.to(device)
 
         # every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
         if half_res:
             rgb, disp, acc, extras = render(H//2, W//2, focal/2, chunk=args.chunk, rays=batch_rays, img_idx=img_idx, **render_kwargs_test)
         else:
@@ -197,7 +197,7 @@ def eval_on_batch(args, data, model, pose, img_idx, hwf, half_res, device, **ren
         psnr = mse2psnr(img2mse(rgb, target))
 
         # end of every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.FloatTensor')
+        
 
         iter_loss = loss.to(device_cpu).detach().numpy()
         iter_loss = np.array([iter_loss])
@@ -244,7 +244,7 @@ def train_on_batch(args, data, model, pose, img_idx, hwf, optimizer, half_res, d
     img_idx = img_idx.to(device)
 
     # # every new tensor from onward is in GPU
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    
     if half_res:
         rgb, disp, acc, extras = render(H//2, W//2, focal/2, chunk=args.chunk, rays=batch_rays, img_idx=img_idx, **render_kwargs_test)
     else:
@@ -267,7 +267,7 @@ def train_on_batch(args, data, model, pose, img_idx, hwf, optimizer, half_res, d
     psnr = mse2psnr(img2mse(rgb, target))
 
     # end of every new tensor from onward is in GPU
-    torch.set_default_tensor_type('torch.FloatTensor')
+    
 
     iter_loss = loss.to(device_cpu).detach().numpy()
     iter_loss = np.array([iter_loss])
@@ -323,7 +323,7 @@ def save_val_result_7Scenes(args, epoch, val_dl, model, hwf, half_res, device, n
             pose_nerf = fix_coord_supp(args, pose_nerf)
         
         # every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
         with torch.no_grad():
             if half_res:
                 rgb, disp, acc, extras = render(H//2, W//2, focal/2, chunk=args.chunk, c2w=pose_nerf[0].to(device), img_idx=img_idx, **render_kwargs_test)
@@ -356,7 +356,7 @@ def save_val_result_7Scenes(args, epoch, val_dl, model, hwf, half_res, device, n
             imageio.imwrite(os.path.join(out_folder, '{0:04d}.png'.format(i)), rgb_img_to_save)
         
         # end of every new tensor from onward is in GPU
-        torch.set_default_tensor_type('torch.FloatTensor')
+        
         i = i+1
 
 

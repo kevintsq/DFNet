@@ -15,7 +15,7 @@ import imageio
 from copy import deepcopy
 
 img2mse = lambda x, y : torch.mean((x - y) ** 2)
-mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.Tensor([10.]))
+mse2psnr = lambda x : -10. * torch.log(x) / math.log(10.)
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 # translation z axis
@@ -83,9 +83,9 @@ def compute_error_in_q(args, dl, model, device, results, batch_size=1):
                 predict_pose = predict_pose.reshape((batch_size, 3, 4)).cpu().numpy()
             time_spent.append(time.time() - start_time)
 
-        pose_q = transforms.matrix_to_quaternion(torch.Tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
+        pose_q = transforms.matrix_to_quaternion(torch.tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
         pose_x = pose[:, :3, 3] # gnd truth position
-        predicted_q = transforms.matrix_to_quaternion(torch.Tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
+        predicted_q = transforms.matrix_to_quaternion(torch.tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
         predicted_x = predict_pose[:, :3, 3] # predict position
         pose_q = pose_q.squeeze() 
         pose_x = pose_x.squeeze() 
@@ -98,7 +98,7 @@ def compute_error_in_q(args, dl, model, device, results, batch_size=1):
         d = torch.abs(torch.sum(torch.matmul(q1,q2))) 
         d = torch.clamp(d, -1., 1.) # acos can only input [-1~1]
         theta = (2 * torch.acos(d) * 180/math.pi).numpy()
-        error_x = torch.linalg.norm(torch.Tensor(pose_x-predicted_x)).numpy()
+        error_x = torch.linalg.norm(torch.tensor(pose_x-predicted_x)).numpy()
         results[i,:] = [error_x, theta]
         #print ('Iteration: {} Error XYZ (m): {} Error Q (degrees): {}'.format(i, error_x, theta)) 
 
@@ -162,9 +162,9 @@ def get_render_error_in_q(args, model, sample_size, device, targets, rgbs, poses
             Rs = torch.matmul(u, v.transpose(-2,-1))
         predict_pose[:,:3,:3] = Rs[:,:3,:3].cpu().numpy()
 
-        pose_q = transforms.matrix_to_quaternion(torch.Tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
+        pose_q = transforms.matrix_to_quaternion(torch.tensor(pose[:,:3,:3]))#.cpu().numpy() # gnd truth in quaternion
         pose_x = pose[:, :3, 3] # gnd truth position
-        predicted_q = transforms.matrix_to_quaternion(torch.Tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
+        predicted_q = transforms.matrix_to_quaternion(torch.tensor(predict_pose[:,:3,:3]))#.cpu().numpy() # predict in quaternion
         predicted_x = predict_pose[:, :3, 3] # predict position
         pose_q = pose_q.squeeze() 
         pose_x = pose_x.squeeze() 
@@ -177,7 +177,7 @@ def get_render_error_in_q(args, model, sample_size, device, targets, rgbs, poses
         d = torch.abs(torch.sum(torch.matmul(q1,q2))) 
         d = torch.clamp(d, -1., 1.) # acos can only input [-1~1]
         theta = (2 * torch.acos(d) * 180/math.pi).numpy()
-        error_x = torch.linalg.norm(torch.Tensor(pose_x-predicted_x)).numpy()
+        error_x = torch.linalg.norm(torch.tensor(pose_x-predicted_x)).numpy()
         results[i,:] = [error_x, theta]
         #print ('Iteration: {} Error XYZ (m): {} Error Q (degrees): {}'.format(i, error_x, theta)) 
 
@@ -226,7 +226,7 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
 
         # generate nerf image
         with torch.no_grad():
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+            
             if args.tinyimg:
                 rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), focal/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
                 # convert rgb to B,C,H,W
@@ -238,7 +238,7 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
 
             else:
                 rgb, _, _, _ = render(H, W, focal, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
-            torch.set_default_tensor_type('torch.FloatTensor')
+            
 
         target_list.append(target.cpu())
         rgb_list.append(rgb.cpu())
@@ -270,7 +270,7 @@ def render_virtual_imgs(args, pose_perturb, img_idxs, hwf, device, render_kwargs
 
         # generate nerf image
         with torch.no_grad():
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+            
             if args.tinyimg:
                 rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), focal/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
                 # convert rgb to B,C,H,W
@@ -282,7 +282,7 @@ def render_virtual_imgs(args, pose_perturb, img_idxs, hwf, device, render_kwargs
 
             else:
                 rgb, _, _, _ = render(H, W, focal, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
-            torch.set_default_tensor_type('torch.FloatTensor')
+            
         rgb_list.append(rgb.cpu())
 
     rgbs = torch.stack(rgb_list).detach()

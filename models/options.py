@@ -2,7 +2,7 @@ import configargparse
 def config_parser():
     parser = configargparse.ArgumentParser()
     parser.add_argument("-f", "--fff", help="a dummy argument to fool ipython", default="1")
-    parser.add_argument("--device", type=int, default=-1, help='CUDA_VISIBLE_DEVICES')
+    parser.add_argument("--device", type=int, default=0, help='CUDA_VISIBLE_DEVICES')
     parser.add_argument("--multi_gpu", action='store_true', help='use multiple gpu on the server')
     parser.add_argument('--config', is_config_file=True, help='config file path')
     parser.add_argument("--expname", type=str, help='experiment name')

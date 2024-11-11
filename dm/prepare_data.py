@@ -14,20 +14,20 @@ def prepare_data(args, images, poses_train, i_split):
     
     i_train, i_val, i_test = i_split
 
-    img_train = torch.Tensor(images[i_train]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
-    pose_train = torch.Tensor(poses_train[i_train])
+    img_train = torch.tensor(images[i_train]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
+    pose_train = torch.tensor(poses_train[i_train])
     
     trainset = TensorDataset(img_train, pose_train)
     train_dl = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
     
-    img_val = torch.Tensor(images[i_val]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
-    pose_val = torch.Tensor(poses_train[i_val])
+    img_val = torch.tensor(images[i_val]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
+    pose_val = torch.tensor(poses_train[i_val])
     
     valset = TensorDataset(img_val, pose_val)
     val_dl = DataLoader(valset)
 
-    img_test = torch.Tensor(images[i_test]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
-    pose_test = torch.Tensor(poses_train[i_test])
+    img_test = torch.tensor(images[i_test]).permute(0, 3, 1, 2) # now shape is [N, CH, H, W]
+    pose_test = torch.tensor(poses_train[i_test])
 
     testset = TensorDataset(img_test, pose_test)
     test_dl = DataLoader(testset)

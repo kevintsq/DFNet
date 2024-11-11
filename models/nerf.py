@@ -7,7 +7,7 @@ import numpy as np
 
 # Misc
 img2mse = lambda x, y : torch.mean((x - y) ** 2)
-mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.Tensor([10.]))
+mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.tensor([10.]))
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 def batchify(fn, chunk):
@@ -80,9 +80,9 @@ class Embedder:
         self.N_freqs = self.kwargs['num_freqs']
 
         if self.kwargs['log_sampling']:
-            freq_bands = 2.**torch.linspace(0., max_freq, steps=self.N_freqs) # tensor([  1.,   2.,   4.,   8.,  16.,  32.,  64., 128., 256., 512.])
+            freq_bands = 2.**torch.linspace(0., max_freq, steps=self.N_freqs, device="cuda") # tensor([  1.,   2.,   4.,   8.,  16.,  32.,  64., 128., 256., 512.])
         else:
-            freq_bands = torch.linspace(2.**0., 2.**max_freq, steps=self.N_freqs) 
+            freq_bands = torch.linspace(2.**0., 2.**max_freq, steps=self.N_freqs, device="cuda")
 
         for freq in freq_bands: # 10 iters for 3D location, 4 iters for 2D direction
             for p_fn in self.kwargs['periodic_fns']:
@@ -104,8 +104,8 @@ class Embedder:
         alpha = num_freqs * epoch / N
         W_j = []
         for i in range(num_freqs):
-            tmp = torch.clamp(torch.Tensor([alpha - i]), 0, 1)
-            tmp2 = (1 - torch.cos(torch.Tensor([np.pi]) * tmp)) / 2
+            tmp = torch.clamp(torch.tensor([alpha - i]), 0, 1)
+            tmp2 = (1 - torch.cos(torch.tensor([np.pi]) * tmp)) / 2
             W_j.append(tmp2)
         return W_j
 

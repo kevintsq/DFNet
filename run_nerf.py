@@ -1,17 +1,8 @@
-import utils.set_sys_path
-import os, sys
-import numpy as np
-import imageio
-import json
-import random
-import time
 import torch
-import torch.nn as nn
-# from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm, trange
+torch.set_float32_matmul_precision('high')
 
-from models.ray_utils import *
-from models.nerfw import * # NeRF-w and NeRF-hist
+from dataset_loaders.load_colmap import load_colmap_dataloader_NeRF
+from models.nerfw import *  # NeRF-w and NeRF-hist
 from models.options import config_parser
 from models.rendering import *
 from dataset_loaders.load_7Scenes import load_7Scenes_dataloader_NeRF
@@ -24,22 +15,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 np.random.seed(0)
 torch.manual_seed(0)
 import random
+
 random.seed(0)
 
 parser = config_parser()
 args = parser.parse_args()
 
-def train_on_epoch_nerfw(args, train_dl, H, W, focal, N_rand, optimizer, loss_func, global_step, render_kwargs_train):
-    for batch_idx, (target, pose, img_idx) in enumerate(train_dl):
-        target = target[0].permute(1,2,0).to(device)
-        pose = pose.reshape(3,4).to(device) # reshape to 3x4 rot matrix
+
+def train_on_epoch_nerfw(args, train_dl, hwf, N_rand, optimizer, loss_func, global_step, render_kwargs_train):
+    H, W, fx, fy = hwf
+    for batch_idx, (target, pose, img_idx) in enumerate(tqdm(train_dl, desc=f'Epoch {global_step}')):
+        target = target[0].permute(1, 2, 0).to(device)
+        pose = pose.reshape(3, 4).to(device)  # reshape to 3x4 rot matrix
         img_idx = img_idx.to(device)
 
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
         if N_rand is not None:
-            rays_o, rays_d = get_rays(H, W, focal, torch.Tensor(pose))  # (H, W, 3), (H, W, 3)
-            coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W), indexing='ij'), -1)  # (H, W, 2)
-            coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
+            rays_o, rays_d = get_rays(H, W, fx, fy, pose)  # (H, W, 3), (H, W, 3)
+            coords = torch.stack(
+                torch.meshgrid(torch.linspace(0, H - 1, H, device=args.device),
+                               torch.linspace(0, W - 1, W, device=args.device), indexing='ij'), -1)  # (H, W, 2)
+            coords = torch.reshape(coords, [-1, 2])  # (H * W, 2)
             select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
             select_coords = coords[select_inds].long()  # (N_rand, 2)
             rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -48,7 +43,8 @@ def train_on_epoch_nerfw(args, train_dl, H, W, focal, N_rand, optimizer, loss_fu
             target_s = target[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
 
         # #####  Core optimization loop  #####
-        rgb, disp, acc, extras = render(H, W, focal, chunk=args.chunk, rays=batch_rays, retraw=True, img_idx=img_idx, **render_kwargs_train)
+        rgb, disp, acc, extras = render(H, W, fx, fy, chunk=args.chunk, rays=batch_rays, retraw=True, img_idx=img_idx,
+                                        **render_kwargs_train)
         optimizer.zero_grad()
 
         # compute loss
@@ -74,19 +70,10 @@ def train_on_epoch_nerfw(args, train_dl, H, W, focal, N_rand, optimizer, loss_fu
         new_lrate = args.lrate * (decay_rate ** (global_step / decay_steps))
         for param_group in optimizer.param_groups:
             param_group['lr'] = new_lrate
-        ################################
-
-        torch.set_default_tensor_type('torch.FloatTensor')
     return loss, psnr
 
-def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=None, render_img=None):
 
-    i_train, i_val, i_test = i_split
-    # Cast intrinsics to right types
-    H, W, focal = hwf
-    H, W = int(H), int(W)
-    hwf = [H, W, focal]
-
+def train_nerf(args, train_dl, val_dl, hwf, near, far, render_poses=None, render_img=None):
     # Create log dir and copy the config file
     basedir = args.basedir
     expname = args.expname
@@ -106,20 +93,17 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
     global_step = start
 
     bds_dict = {
-        'near' : near,
-        'far' : far,
+        'near': near,
+        'far': far,
     }
     render_kwargs_train.update(bds_dict)
     render_kwargs_test.update(bds_dict)
-    if args.reduce_embedding==2:
+    if args.reduce_embedding == 2:
         render_kwargs_train['i_epoch'] = -1
         render_kwargs_test['i_epoch'] = -1
 
     if args.render_test:
-        print('TRAIN views are', i_train)
-        print('TEST views are', i_test)
-        print('VAL views are', i_val)
-        if args.reduce_embedding==2:
+        if args.reduce_embedding == 2:
             render_kwargs_test['i_epoch'] = global_step
         render_test(args, train_dl, val_dl, hwf, start, render_kwargs_test)
         return
@@ -128,28 +112,25 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
     N_rand = args.N_rand
     # use_batching = not args.no_batching
 
-    N_epoch = args.epochs + 1 # epoch
+    N_epoch = args.epochs + 1  # epoch
     print('Begin')
-    print('TRAIN views are', i_train)
-    print('TEST views are', i_test)
-    print('VAL views are', i_val)
-
 
     # loss function
     loss_func = loss_dict['nerfw'](coef=1)
 
-    for i in trange(start, N_epoch):
+    for i in tqdm(range(start, N_epoch), desc='Training'):
         time0 = time.time()
-        if args.reduce_embedding==2:
+        if args.reduce_embedding == 2:
             render_kwargs_train['i_epoch'] = i
-        loss, psnr = train_on_epoch_nerfw(args, train_dl, H, W, focal, N_rand, optimizer, loss_func, global_step, render_kwargs_train)
-        dt = time.time()-time0
+        loss, psnr = train_on_epoch_nerfw(args, train_dl, hwf, N_rand, optimizer, loss_func, global_step,
+                                          render_kwargs_train)
+        dt = time.time() - time0
         #####           end            #####
 
         # Rest is logging
-        if i%args.i_weights==0 and i!=0:
+        if i % args.i_weights == 0 and i != 0:
             path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
-            if args.N_importance > 0: # have fine sample network
+            if args.N_importance > 0:  # have fine sample network
                 torch.save({
                     'global_step': global_step,
                     'network_fn_state_dict': render_kwargs_train['network_fn'].state_dict(),
@@ -166,27 +147,27 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
                 }, path)
             print('Saved checkpoints at', path)
 
-        if i%args.i_testset==0 and i > 0: # run thru all validation set
+        if i % args.i_testset == 0 and i > 0:  # run thru all validation set
 
             # clean GPU memory before testing, try to avoid OOM
             torch.cuda.empty_cache()
 
-            if args.reduce_embedding==2:
+            if args.reduce_embedding == 2:
                 render_kwargs_test['i_epoch'] = i
             trainsavedir = os.path.join(basedir, expname, 'trainset_{:06d}'.format(i))
             os.makedirs(trainsavedir, exist_ok=True)
             images_train = []
             poses_train = []
             index_train = []
-            j_skip = 10 # save holdout view render result Trainset/j_skip
+            j_skip = 10  # save holdout view render result Trainset/j_skip
             # randomly choose some holdout views from training set
             for batch_idx, (img, pose, img_idx) in enumerate(train_dl):
                 if batch_idx % j_skip != 0:
                     continue
-                img_val = img.permute(0,2,3,1) # (1,H,W,3)
-                pose_val = torch.zeros(1,4,4)
-                pose_val[0,:3,:4] = pose.reshape(3,4)[:3,:4] # (1,3,4))
-                pose_val[0,3,3] = 1.
+                img_val = img.permute(0, 2, 3, 1)  # (1,H,W,3)
+                pose_val = torch.zeros(1, 4, 4)
+                pose_val[0, :3, :4] = pose.reshape(3, 4)[:3, :4]  # (1,3,4))
+                pose_val[0, 3, 3] = 1.
                 images_train.append(img_val)
                 poses_train.append(pose_val)
                 index_train.append(img_idx)
@@ -196,9 +177,10 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
             print('train poses shape', poses_train.shape)
 
             with torch.no_grad():
-                torch.set_default_tensor_type('torch.cuda.FloatTensor')
-                render_path(args, poses_train, hwf, args.chunk, render_kwargs_test, gt_imgs=images_train, savedir=trainsavedir, img_ids=index_train)
-                torch.set_default_tensor_type('torch.FloatTensor')
+
+                render_path(args, poses_train, hwf, args.chunk, render_kwargs_test, gt_imgs=images_train,
+                            savedir=trainsavedir, img_ids=index_train)
+
             print('Saved train set')
             del images_train
             del poses_train
@@ -210,10 +192,10 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
             index_val = []
             # views from validation set
             for img, pose, img_idx in val_dl:
-                img_val = img.permute(0,2,3,1) # (1,H,W,3)
-                pose_val = torch.zeros(1,4,4)
-                pose_val[0,:3,:4] = pose.reshape(3,4)[:3,:4] # (1,3,4))
-                pose_val[0,3,3] = 1.
+                img_val = img.permute(0, 2, 3, 1)  # (1,H,W,3)
+                pose_val = torch.zeros(1, 4, 4)
+                pose_val[0, :3, :4] = pose.reshape(3, 4)[:3, :4]  # (1,3,4))
+                pose_val[0, 3, 3] = 1.
                 images_val.append(img_val)
                 poses_val.append(pose_val)
                 index_val.append(img_idx)
@@ -224,23 +206,24 @@ def train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses=Non
             print('test poses shape', poses_val.shape)
 
             with torch.no_grad():
-                torch.set_default_tensor_type('torch.cuda.FloatTensor')
-                render_path(args, poses_val, hwf, args.chunk, render_kwargs_test, gt_imgs=images_val, savedir=testsavedir, img_ids=index_val)
-                torch.set_default_tensor_type('torch.FloatTensor')
+
+                render_path(args, poses_val, hwf, args.chunk, render_kwargs_test, gt_imgs=images_val,
+                            savedir=testsavedir, img_ids=index_val)
+
             print('Saved test set')
 
             # clean GPU memory after testing
             torch.cuda.empty_cache()
             del images_val
             del poses_val
-    
-        if i%args.i_print==0:
+
+        if i % args.i_print == 0:
             tqdm.write(f"[TRAIN] Iter: {i} Loss: {loss.item()}  PSNR: {psnr.item()}")
 
         global_step += 1
 
-def train():
 
+def train():
     print(parser.format_values())
 
     # Load data
@@ -251,23 +234,27 @@ def train():
         far = bds[1]
 
         print('NEAR FAR', near, far)
-        train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses, render_img)
+        train_nerf(args, train_dl, val_dl, hwf, near, far, render_poses, render_img)
         return
 
     elif args.dataset_type == 'Cambridge':
 
-        train_dl, val_dl, hwf, i_split, bds, render_poses, render_img = load_Cambridge_dataloader_NeRF(args)
+        train_dl, val_dl, hwf, bds, render_poses, render_img = load_Cambridge_dataloader_NeRF(args)
         near = bds[0]
         far = bds[1]
 
         print('NEAR FAR', near, far)
-        train_nerf(args, train_dl, val_dl, hwf, i_split, near, far, render_poses, render_img)
+        train_nerf(args, train_dl, val_dl, hwf, near, far, render_poses, render_img)
         return
 
     else:
-        print('Unknown dataset type', args.dataset_type, 'exiting')
-        return
+        train_dl, val_dl, hwf, bds, render_poses, render_img = load_colmap_dataloader_NeRF(args)
+        near = bds[0]
+        far = bds[1]
 
-if __name__=='__main__':
+        print('NEAR FAR', near, far)
+        train_nerf(args, train_dl, val_dl, hwf, near, far, render_poses, render_img)
 
+
+if __name__ == '__main__':
     train()
