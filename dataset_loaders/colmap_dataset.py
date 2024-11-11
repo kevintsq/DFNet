@@ -19,7 +19,7 @@ class ColmapDataset(PoseRegDataset):
     def poses(self, poses):
         self._poses = torch.tensor(poses, dtype=torch.float)
 
-    def __init__(self, data_path, train, seed=7, trainskip=1, testskip=1,
+    def __init__(self, data_path, df, train, seed=7, trainskip=1, testskip=1,
                  return_orig=False, fix_idx=False, ret_hist=False, hist_bin=10):
         scene_info = readColmapSceneInfo(data_path, "images", True)
         cameras = scene_info.train_cameras if train else scene_info.test_cameras
@@ -43,5 +43,5 @@ class ColmapDataset(PoseRegDataset):
 
         self.near = 0.01
         self.far = 100.0
-        hwf = (cameras[0].height, cameras[0].width, cameras[0].fx, cameras[0].fy)
+        hwf = (int(cameras[0].height / df), int(cameras[0].width / df), cameras[0].fx / df, cameras[0].fy / df)
         super().__init__(train, hwf, seed, return_orig, fix_idx, ret_hist, hist_bin)

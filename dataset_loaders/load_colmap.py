@@ -270,7 +270,7 @@ def load_colmap_dataloader_NeRF(args):
         fix_idx = False
         ret_hist = True
 
-    kwargs = dict(data_path=args.datadir, fix_idx=fix_idx, ret_hist=ret_hist, hist_bin=args.hist_bin)
+    kwargs = dict(data_path=args.datadir, df=args.df, fix_idx=fix_idx, ret_hist=ret_hist, hist_bin=args.hist_bin)
 
     train_set = ColmapDataset(train=True, trainskip=args.trainskip, **kwargs)
     val_set = ColmapDataset(train=False, testskip=args.testskip, **kwargs)
