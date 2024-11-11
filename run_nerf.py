@@ -119,13 +119,30 @@ def train_nerf(args, train_dl, val_dl, hwf, near, far, render_poses=None, render
     loss_func = loss_dict['nerfw'](coef=1)
 
     for i in tqdm(range(start, N_epoch), desc='Training'):
-        time0 = time.time()
         if args.reduce_embedding == 2:
             render_kwargs_train['i_epoch'] = i
-        loss, psnr = train_on_epoch_nerfw(args, train_dl, hwf, N_rand, optimizer, loss_func, global_step,
-                                          render_kwargs_train)
-        dt = time.time() - time0
-        #####           end            #####
+        try:
+            loss, psnr = train_on_epoch_nerfw(args, train_dl, hwf, N_rand, optimizer, loss_func, global_step,
+                                              render_kwargs_train)
+        except KeyboardInterrupt:
+            path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
+            if args.N_importance > 0:  # have fine sample network
+                torch.save({
+                    'global_step': global_step,
+                    'network_fn_state_dict': render_kwargs_train['network_fn'].state_dict(),
+                    'network_fine_state_dict': render_kwargs_train['network_fine'].state_dict(),
+                    'embedding_a_state_dict': render_kwargs_train['embedding_a'].state_dict(),
+                    'embedding_t_state_dict': render_kwargs_train['embedding_t'].state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                }, path)
+            else:
+                torch.save({
+                    'global_step': global_step,
+                    'network_fn_state_dict': render_kwargs_train['network_fn'].state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                }, path)
+            print('Saved checkpoints at', path)
+            break
 
         # Rest is logging
         if i % args.i_weights == 0 and i != 0:
