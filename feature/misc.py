@@ -1,18 +1,16 @@
-import torch
-from torch import nn
-import pdb
+import math
+import time
+from copy import deepcopy
+
+import numpy as np
 # from torchvision import transforms, datasets
 import pytorch3d.transforms as transforms
-import numpy as np
-import math
-from utils.utils import plot_features, save_image_saliancy
+import torch
+from torch import nn
+from tqdm import tqdm
+
 from dm.direct_pose_model import fix_coord_supp
-from dm.pose_model import vis_pose
-from models.rendering import render, render_path
-import time
-import os
-import imageio
-from copy import deepcopy
+from models.rendering import render
 
 img2mse = lambda x, y : torch.mean((x - y) ** 2)
 mse2psnr = lambda x : -10. * torch.log(x) / math.log(10.)
@@ -23,28 +21,28 @@ trans_t = lambda t : np.array([
     [1,0,0,0],
     [0,1,0,0],
     [0,0,1,t],
-    [0,0,0,1]], dtype=np.float)
+    [0,0,0,1]])
 
 # x rotation
 rot_phi = lambda phi : np.array([
     [1,0,0,0],
     [0,np.cos(phi),-np.sin(phi),0],
     [0,np.sin(phi), np.cos(phi),0],
-    [0,0,0,1]], dtype=np.float)
+    [0,0,0,1]])
 
 # y rotation
 rot_theta = lambda th : np.array([
     [np.cos(th),0,-np.sin(th),0],
     [0,1,0,0],
     [np.sin(th),0, np.cos(th),0],
-    [0,0,0,1]], dtype=np.float)
+    [0,0,0,1]])
 
 # z rotation
 rot_psi = lambda psi : np.array([
     [np.cos(psi),-np.sin(psi),0,0],
     [np.sin(psi),np.cos(psi),0,0],
     [0,0,1,0],
-    [0,0,0,1]], dtype=np.float)
+    [0,0,0,1]])
 
 def compute_error_in_q(args, dl, model, device, results, batch_size=1):
     use_SVD=True # Turn on for Direct-PN and Direct-PN+U reported result, despite it makes minuscule differences
@@ -202,7 +200,7 @@ def get_render_error_in_q(args, model, sample_size, device, targets, rgbs, poses
 
 def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dict):
     ''' render nerfw imgs, save unscaled pose and results'''
-    H, W, focal = hwf
+    H, W, fx, fy = hwf
     target_list = []
     rgb_list = []
     pose_list = []
@@ -211,10 +209,7 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
     # time0 = time.time()
     
     # inference nerfw and save rgb, target, pose
-    for batch_idx, (target, pose, img_idx) in enumerate(dl):
-        if batch_idx % 10 == 0:
-            print("renders {}/total {}".format(batch_idx, len(dl.dataset)))
-
+    for batch_idx, (target, pose, img_idx) in enumerate(tqdm(dl, desc='Rendering')):
         target = target[0].permute(1,2,0).to(device) # (240,360,3)
         pose = pose.reshape(3,4) # reshape to 3x4 rot matrix
 
@@ -228,7 +223,7 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
         with torch.no_grad():
             
             if args.tinyimg:
-                rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), focal/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
+                rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), fx/args.tinyscale, fy/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
                 # convert rgb to B,C,H,W
                 rgb = rgb[None,...].permute(0,3,1,2)
                 # upsample rgb to hwf size
@@ -237,7 +232,7 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
                 rgb = rgb[0].permute(1,2,0)
 
             else:
-                rgb, _, _, _ = render(H, W, focal, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
+                rgb, _, _, _ = render(H, W, fx, fy, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=True, img_idx=img_idx, **render_kwargs_test)
             
 
         target_list.append(target.cpu())
@@ -253,11 +248,11 @@ def render_nerfw_imgs(args, dl, hwf, device, render_kwargs_test, world_setup_dic
 
 def render_virtual_imgs(args, pose_perturb, img_idxs, hwf, device, render_kwargs_test, world_setup_dict):
     ''' render nerfw imgs, save unscaled pose and results'''
-    H, W, focal = hwf
+    H, W, fx, fy = hwf
     rgb_list = []
 
     # inference nerfw and save rgb, target, pose
-    for batch_idx in range(pose_perturb.shape[0]):
+    for batch_idx in tqdm(range(pose_perturb.shape[0]), desc='Rendering'):
         # if batch_idx % 10 == 0:
             # print("renders RVS {}/total {}".format(batch_idx, pose_perturb.shape[0]))
 
@@ -272,7 +267,7 @@ def render_virtual_imgs(args, pose_perturb, img_idxs, hwf, device, render_kwargs
         with torch.no_grad():
             
             if args.tinyimg:
-                rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), focal/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
+                rgb, _, _, _ = render(int(H//args.tinyscale), int(W//args.tinyscale), fx/args.tinyscale, fy/args.tinyscale, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
                 # convert rgb to B,C,H,W
                 rgb = rgb[None,...].permute(0,3,1,2)
                 # upsample rgb to hwf size
@@ -281,7 +276,7 @@ def render_virtual_imgs(args, pose_perturb, img_idxs, hwf, device, render_kwargs
                 rgb = rgb[0].permute(1,2,0)
 
             else:
-                rgb, _, _, _ = render(H, W, focal, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
+                rgb, _, _, _ = render(H, W, fx, fy, chunk=args.chunk, c2w=pose_nerf[0,:3,:4].to(device), retraw=False, img_idx=img_idx, **render_kwargs_test)
             
         rgb_list.append(rgb.cpu())
 

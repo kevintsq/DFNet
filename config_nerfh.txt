@@ -1,12 +1,12 @@
 ############################################### NeRF-Hist training example Cambridge ###############################################
 expname=nerfh
-basedir=logs/mars_41
-datadir=E:\MARS\41
+basedir=logs/mars_11
+datadir=/mnt/SSD1/MARS/11
 dataset_type=Colmap
 lrate_decay=5
 trainskip=1
 testskip=1
-df=4
+df=2
 load_pose_avg_stats=False
 NeRFH=True
 encode_hist=True

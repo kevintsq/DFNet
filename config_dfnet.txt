@@ -1,13 +1,13 @@
 ############################################### NeRF-Hist training example Cambridge ###############################################
 model_name=dfnet
-basedir=../logs/kings
+basedir=logs/mars_41
 expname=nerfh
-datadir=../data/Cambridge/KingsCollege
-dataset_type=Cambridge
-trainskip=2 # train
+datadir=/mnt/SSD1/MARS/41
+dataset_type=Colmap
+trainskip=1 # train
 testskip=1 # train
-df=2
-load_pose_avg_stats=True
+df=4
+load_pose_avg_stats=False
 NeRFH=True
 epochs=2000
 encode_hist=True

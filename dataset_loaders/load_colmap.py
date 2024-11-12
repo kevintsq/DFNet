@@ -229,7 +229,7 @@ def load_colmap_dataloader(args):
         fix_idx = False
         ret_hist = True
 
-    kwargs = dict(data_path=args.datadir, fix_idx=fix_idx,
+    kwargs = dict(df=args.df, data_path=args.datadir, fix_idx=fix_idx,
                   ret_hist=ret_hist, hist_bin=args.hist_bin)
 
     train_set = ColmapDataset(train=True, trainskip=args.trainskip, **kwargs)
