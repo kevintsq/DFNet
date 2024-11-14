@@ -107,8 +107,8 @@ args = parser.parse_args()
 def train_on_batch(args, targets, rgbs, poses, feat_model, dset_size, FeatureLoss, optimizer, hwf):
     ''' core training loop for featurenet'''
     feat_model.train()
-    H, W, focal = hwf
-    H, W = int(H), int(W)
+    # H, W, focal = hwf
+    # H, W = int(H), int(W)
     if args.freezeBN:
         feat_model = freeze_bn_layer_train(feat_model)
 
@@ -135,8 +135,8 @@ def train_on_batch(args, targets, rgbs, poses, feat_model, dset_size, FeatureLos
         pose = poses[i_inds].clone().reshape(batch_size, 12).to(device)
         pose = torch.cat([pose, pose])  # double gt pose tensor
 
-        features, predict_pose = feat_model(torch.cat([target_in, rgb_in]), True, upsampleH=H,
-                                            upsampleW=W)  # features: (1, [2, B, C, H, W])
+        features, predict_pose = feat_model(torch.cat([target_in, rgb_in]), True, upsampleH=hwf[0],
+                                            upsampleW=hwf[1])  # features: (1, [2, B, C, H, W])
 
         # get features_target and features_rgb
         if args.DFNet:
